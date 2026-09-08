@@ -90,7 +90,10 @@ space, including obstacle outlines and pockets between components. A diagonal
 side is skipped when its normal points partly in any disabled direction.
 The packed extents also stay within the current component/obstacle envelope
 on disabled sides, preventing later placements from drifting past those edges.
-Use `bounds` to set additional absolute limits on the final component extents.
+With direction restrictions enabled, use `bounds` to set additional absolute limits on the placed component extents,
+including the initial dynamic seed. A seed outside these limits is moved inside
+them using its rotated pad and courtyard extents; other allowed rotations can
+be tried when needed. Static components retain their supplied positions.
 
 Omitting the option, or passing `[]`, keeps the default behavior. The first
 unobstructed component still seeds the layout at the usual initial position;

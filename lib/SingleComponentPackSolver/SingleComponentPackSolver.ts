@@ -23,6 +23,7 @@ import { isPointInPolygon } from "lib/math/isPointInPolygon"
 import { getComponentBounds } from "lib/geometry/getComponentBounds"
 import { getOutwardNormal } from "../OutlineSegmentCandidatePointSolver/getOutwardNormal"
 import { combineBounds } from "../geometry/combineBounds"
+import { getInitialPackedComponent } from "../PackSolver2/getInitialPackedComponent"
 
 type Phase = "outline" | "segment_candidate" | "evaluate"
 
@@ -140,29 +141,17 @@ export class SingleComponentPackSolver extends BaseSolver {
   }
 
   private executeOutlinePhase() {
-    // Special case: if no packed components, attempt center; if too close to obstacles, fall back to outline-based placement
+    // Both entry points share the same bounds, boundary, and obstacle checks for the seed.
     if (this.packedComponents.length === 0) {
-      const availableRotations = this.componentToPack
-        .availableRotationDegrees ?? [0, 90, 180, 270]
-      const position = { x: 0, y: 0 }
-      const rotation = availableRotations[0] ?? 0
-
-      // Build candidate at center and verify obstacle clearance
-      const candidate = this.createPackedComponent(position, rotation)
-      const candidateBoxes = getComponentCollisionBoxes(candidate)
-      const tooCloseToObstacles = (this.obstacles ?? []).some((obs) => {
-        const obsBox = {
-          center: { x: obs.absoluteCenter.x, y: obs.absoluteCenter.y },
-          width: obs.width,
-          height: obs.height,
-        }
-        return candidateBoxes.some((box) => {
-          const { distance } = computeDistanceBetweenBoxes(box, obsBox)
-          return distance + 1e-6 < this.minGap
-        })
+      const candidate = getInitialPackedComponent(this.componentToPack, {
+        minGap: this.minGap,
+        obstacles: this.obstacles,
+        bounds: this.disabledPackDirections?.length ? this.bounds : undefined,
+        boundaryOutline: this.disabledPackDirections?.length
+          ? this.boundaryOutline
+          : undefined,
       })
-
-      if (!tooCloseToObstacles) {
+      if (candidate) {
         this.outputPackedComponent = candidate
         this.solved = true
         return

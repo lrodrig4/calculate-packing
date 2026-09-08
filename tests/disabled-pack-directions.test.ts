@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { getSvgFromGraphicsObject } from "graphics-debug"
 import { getGraphicsFromPackOutput, pack, type PackInput } from "../lib"
+import { SingleComponentPackSolver } from "../lib/SingleComponentPackSolver/SingleComponentPackSolver"
 
 type Direction = NonNullable<PackInput["disabledPackDirections"]>[number]
 const directions: Direction[] = ["left", "right", "up", "down"]
@@ -143,6 +144,101 @@ test("the first unobstructed component can still seed the layout", () => {
   input.components = [input.components[0]!]
   input.disabledPackDirections = [...directions]
   expect(pack(input).components[0]!.center).toEqual({ x: 0, y: 0 })
+})
+
+test("the initial seed fits bounds that exclude the origin", () => {
+  const input = makeInput()
+  input.components = [input.components[0]!]
+  input.bounds = { minX: 10, maxX: 20, minY: 10, maxY: 20 }
+  input.disabledPackDirections = [...directions]
+  const output = pack(input)
+  expect(output.components[0]!.center).toEqual({ x: 11, y: 11 })
+  expect(output.components[0]!.pads[0]!.absoluteCenter).toEqual({
+    x: 11,
+    y: 11,
+  })
+  const solver = new SingleComponentPackSolver({
+    ...input,
+    componentToPack: input.components[0]!,
+    packedComponents: [],
+  })
+  solver.solve()
+  expect(solver.getResult()).toEqual(output.components[0])
+})
+
+test("seed bounds account for rotated pad offsets and courtyards", () => {
+  const input = makeInput()
+  const seed = input.components[0]!
+  input.components = [seed]
+  seed.availableRotationDegrees = [90]
+  seed.pads[0]!.offset = { x: 2, y: 0 }
+  seed.pads[0]!.size = { x: 2, y: 1 }
+  seed.courtyard = { width: 4, height: 2, offsetFromCenter: { x: 2, y: 0 } }
+  input.bounds = { minX: 10, maxX: 12, minY: 10, maxY: 14 }
+  input.disabledPackDirections = [...directions]
+  const original = structuredClone(input)
+  const result = pack(input).components[0]!
+  expect(result.center.x).toBeCloseTo(11, 6)
+  expect(result.center.y).toBeCloseTo(10, 6)
+  expect(result.pads[0]!.absoluteCenter.y).toBeCloseTo(12, 6)
+  expect(result.pads[0]!.size).toEqual({ x: 1, y: 2 })
+  expect(input).toEqual(original)
+})
+
+test("a seed can use another allowed rotation to fit the bounds", () => {
+  const input = makeInput()
+  const seed = input.components[0]!
+  input.components = [seed]
+  seed.pads[0]!.size = { x: 4, y: 2 }
+  seed.availableRotationDegrees = [0, 90]
+  input.bounds = { minX: -1, maxX: 1, minY: -2, maxY: 2 }
+  input.disabledPackDirections = [...directions]
+  expect(pack(input).components[0]!.ccwRotationOffset).toBe(90)
+})
+
+test("an oversized restricted seed fails instead of violating bounds", () => {
+  const input = makeInput()
+  input.components = [input.components[0]!]
+  input.bounds = { minX: -0.5, maxX: 0.5, minY: -0.5, maxY: 0.5 }
+  input.disabledPackDirections = [...directions]
+  expect(() => pack(input)).toThrow("No valid candidates")
+})
+
+test("obstacle fallback cannot restore an out-of-bounds origin seed", () => {
+  const input = makeInput()
+  input.components = [input.components[0]!]
+  input.bounds = { minX: 10, maxX: 12, minY: 10, maxY: 12 }
+  input.obstacles = [
+    {
+      obstacleId: "blocker",
+      absoluteCenter: { x: 11, y: 11 },
+      width: 2,
+      height: 2,
+    },
+  ]
+  input.disabledPackDirections = only("right")
+  expect(() => pack(input)).toThrow("No valid candidates")
+})
+
+test("seed placement satisfies bounds and the boundary outline together", () => {
+  const input = makeInput()
+  input.components = [input.components[0]!]
+  input.bounds = { minX: 10, maxX: 20, minY: 10, maxY: 20 }
+  input.boundaryOutline = [
+    { x: 12, y: 12 },
+    { x: 18, y: 12 },
+    { x: 18, y: 18 },
+    { x: 12, y: 18 },
+  ]
+  input.disabledPackDirections = [...directions]
+  expect(pack(input).components[0]!.center).toEqual({ x: 15, y: 15 })
+  input.boundaryOutline = [
+    { x: -3, y: -3 },
+    { x: 3, y: -3 },
+    { x: 3, y: 3 },
+    { x: -3, y: 3 },
+  ]
+  expect(() => pack(input)).toThrow("No valid candidates")
 })
 
 test("direction filtering still permits placement inside a free-space pocket", () => {
