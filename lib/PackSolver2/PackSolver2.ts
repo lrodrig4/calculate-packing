@@ -172,11 +172,15 @@ export class PackSolver2 extends BaseSolver {
       bounds: this.packInput.bounds,
       boundaryOutline: this.packInput.boundaryOutline,
       weightedConnections: this.packInput.weightedConnections,
+      disabledPackDirections: this.packInput.disabledPackDirections,
     })
     fallbackSolver.solve()
     const result = fallbackSolver.getResult()
     if (result) {
       this.packedComponents.push(result)
+    } else if (this.packInput.disabledPackDirections?.length) {
+      this.failed = true
+      this.error = fallbackSolver.error ?? "No valid candidates found"
     } else {
       // Fallback: place at center even if it violates constraints (should rarely happen)
       // This typically indicates impossible constraints (e.g., component too large for boundary)
@@ -219,6 +223,7 @@ export class PackSolver2 extends BaseSolver {
         bounds: this.packInput.bounds,
         boundaryOutline: this.packInput.boundaryOutline,
         weightedConnections: this.packInput.weightedConnections,
+        disabledPackDirections: this.packInput.disabledPackDirections,
       })
       this.activeSubSolver.setup()
     }
@@ -227,6 +232,7 @@ export class PackSolver2 extends BaseSolver {
 
     if (this.activeSubSolver.failed) {
       this.failed = true
+      this.error = this.activeSubSolver.error
       return
     }
 
